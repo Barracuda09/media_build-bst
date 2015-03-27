@@ -323,13 +323,13 @@ static int dvbsky_s960_attach(struct dvb_usb_adapter *adap)
 	adap->fe[0] = dvb_attach(dvbsky_m88ds3103_attach,
 				&dvbsky_usb_ds3103_config,
 				&d->i2c_adap);
-				
+
 	if (!adap->fe[0]) {
 		dev_err(&d->udev->dev, "dvbsky_s960_attach fail.\n");
 		ret = -ENODEV;
 		goto fail_attach;
 	}
-	
+
 	/* hook fe: need to resync the slave fifo when signal locks. */
 	state->fe_read_status = adap->fe[0]->ops.read_status;
 	adap->fe[0]->ops.read_status = dvbsky_usb_read_status;
@@ -338,7 +338,7 @@ static int dvbsky_s960_attach(struct dvb_usb_adapter *adap)
 	state->fe_set_voltage = adap->fe[0]->ops.set_voltage;
 	adap->fe[0]->ops.set_voltage = dvbsky_usb_set_voltage;	
 
-fail_attach:	
+fail_attach:
 	return ret;
 }
 
@@ -726,6 +726,8 @@ static const struct usb_device_id dvbsky_id_table[] = {
 		&dvbsky_t680c_props, "DVBSky T680CI", RC_MAP_DVBSKY) },
 	{ DVB_USB_DEVICE(0x0572, 0x0320,
 		&dvbsky_t330_props, "DVBSky T330", RC_MAP_DVBSKY) },
+	{ DVB_USB_DEVICE(0x0b48, 0x3014,
+		&dvbsky_t330_props, "TechnoTrend CT2-4400", RC_MAP_DVBSKY) },
 	{ }
 };
 MODULE_DEVICE_TABLE(usb, dvbsky_id_table);

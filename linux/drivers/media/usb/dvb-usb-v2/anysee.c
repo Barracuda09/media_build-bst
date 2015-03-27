@@ -43,6 +43,8 @@
 #include "stv6110.h"
 #include "isl6423.h"
 #include "cxd2820r.h"
+#include "stv090x.h"
+#include "stv6110x.h"
 
 DVB_DEFINE_MOD_OPT_ADAPTER_NR(adapter_nr);
 
@@ -182,7 +184,7 @@ static int anysee_get_hw_info(struct dvb_usb_device *d, u8 *id)
 
 static int anysee_streaming_ctrl(struct dvb_frontend *fe, int onoff)
 {
-	u8 buf[] = {CMD_STREAMING_CTRL, (u8)onoff, 0x00};
+	u8 buf[] = {CMD_STREAMING_CTRL, 0x01, (u8)onoff, 0x00};
 	dev_dbg(&fe_to_d(fe)->udev->dev, "%s: onoff=%d\n", __func__, onoff);
 	return anysee_ctrl_msg(fe_to_d(fe), buf, sizeof(buf), NULL, 0);
 }
@@ -371,6 +373,25 @@ static struct stv6110_config anysee_stv6110_config = {
 	.clk_div = 1,
 };
 
+static struct stv090x_config anysee_stv090x_config = {
+	.device = STV0903,
+	.demod_mode = STV090x_SINGLE,
+	.clk_mode = STV090x_CLK_EXT,
+	.xtal = 8000000,
+	.address = 0x68,
+	.ts1_mode = STV090x_TSMODE_DVBCI,
+	.ts1_clk = 8000000,
+	.ts1_tei = 0,
+	.repeater_level = STV090x_RPTLEVEL_16,
+	.tuner_bbgain = 6,
+	.adc1_range = STV090x_ADC_1Vpp,
+};
+
+static struct stv6110x_config anysee_stv6110x_config = {
+	.addr = 0x60,
+	.refclk = 16000000,
+	.clk_div = 2,
+};
 static struct isl6423_config anysee_isl6423_config = {
 	.current_max = SEC_CURRENT_800m,
 	.curlim  = SEC_CURRENT_LIM_OFF,
@@ -790,9 +811,17 @@ static int anysee_frontend_attach(struct dvb_usb_adapter *adap)
 		if (ret)
 			goto error;
 
-		/* attach demod */
+		/* attach demod, if fails try another (PCB rev 2.4) */
 		adap->fe[0] = dvb_attach(cx24116_attach, &anysee_cx24116_config,
 				&d->i2c_adap);
+
+		if (!adap->fe[0]) {
+			dev_info(&d->udev->dev, "%s: Try frontend stv090x\n", KBUILD_MODNAME);
+
+			/* attach demod for PCB rev 2.4 */
+			adap->fe[0] = dvb_attach(stv090x_attach, &anysee_stv090x_config,
+					&d->i2c_adap, STV090x_DEMODULATOR_0 );
+		}
 
 		break;
 	case ANYSEE_HW_507FA: /* 15 */
@@ -1015,6 +1044,28 @@ static int anysee_tuner_attach(struct dvb_usb_adapter *adap)
 		/* attach LNB controller */
 		fe = dvb_attach(isl6423_attach, adap->fe[0], &d->i2c_adap,
 				&anysee_isl6423_config);
+
+		if (fe) {
+			struct stv6110x_devctl *ctl;
+
+			/* attach tuner */
+			ctl = dvb_attach(stv6110x_attach, adap->fe[0],
+					&anysee_stv6110x_config, &d->i2c_adap);
+
+			if (ctl) {
+				anysee_stv090x_config.tuner_init          = ctl->tuner_init;
+				anysee_stv090x_config.tuner_sleep         = ctl->tuner_sleep;
+				anysee_stv090x_config.tuner_set_mode      = ctl->tuner_set_mode;
+				anysee_stv090x_config.tuner_set_frequency = ctl->tuner_set_frequency;
+				anysee_stv090x_config.tuner_get_frequency = ctl->tuner_get_frequency;
+				anysee_stv090x_config.tuner_set_bandwidth = ctl->tuner_set_bandwidth;
+				anysee_stv090x_config.tuner_get_bandwidth = ctl->tuner_get_bandwidth;
+				anysee_stv090x_config.tuner_set_bbgain    = ctl->tuner_set_bbgain;
+				anysee_stv090x_config.tuner_get_bbgain    = ctl->tuner_get_bbgain;
+				anysee_stv090x_config.tuner_set_refclk    = ctl->tuner_set_refclk;
+				anysee_stv090x_config.tuner_get_status    = ctl->tuner_get_status;
+			}
+		}
 
 		break;
 	case ANYSEE_HW_507FA: /* 15 */
